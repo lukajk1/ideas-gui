@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Quick capture</title>
+    <link rel="icon" href="/ui/icon.png">
+    <link rel="stylesheet" href="/ui/app.css">
+</head>
+<body class="capture">
+    <div class="cap-head pywebview-drag-region">
+        <img src="/ui/icon.png" alt="">
+        <span class="t">New idea</span>
+        <div class="spacer"></div>
+        <button type="button" id="cap-close" title="Close (Esc). Your text stays here for next time.">×</button>
+    </div>
+    <div class="cap-body">
+        <input id="cap-title" class="title-input" placeholder="What's the idea?" autocomplete="off" spellcheck="true">
+        <div id="cap-tags"></div>
+        <textarea id="cap-desc" placeholder="Details (optional)" spellcheck="true"></textarea>
+    </div>
+    <div class="cap-foot">
+        <span class="hint" id="cap-hint"><kbd>Enter</kbd> in the title or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> saves · <kbd>Esc</kbd> closes</span>
+        <div class="spacer"></div>
+        <button type="button" id="cap-open" title="Save and show it in the main window (Ctrl+Shift+Enter)">Save &amp; open</button>
+        <button type="button" id="cap-save" class="primary">Save</button>
+    </div>
+    <div class="cap-done" id="cap-done" hidden><span>Saved</span></div>
+
+    <script type="module">
+        import { api, $, tagCounts, TagInput } from '/ui/common.js';
+
+        let known = [];
+        const tags = new TagInput($('#cap-tags'), { suggestions: () => known, placeholder: 'Tags (optional)' });
+        let busy = false;
+
+        async function loadTags() {
+            try {
+                const st = await api('/api/state');
+                known = (st.ideas ? tagCounts(st.ideas) : []).map(([t]) => t);
+            } catch { known = []; }
+        }
+
+        window.openCapture = () => {
+            $('#cap-done').hidden = true;
+            loadTags();
+        };
+        window.focusCapture = () => {
+            const t = $('#cap-title');
+            t.focus();
+            t.select();
+        };
+
+        function close() {
+            api('/api/window/capture-done', {}).catch(() => {});
+        }
+
+        async function save(open) {
+            if (busy) return;
+            const title = $('#cap-title').value.trim();
+            if (!title) { $('#cap-title').focus(); return; }
+            tags.commit();
+            busy = true;
+            try {
+                const { idea } = await api('/api/ideas/create', {
+                    fields: { title, tags: tags.value, description: $('#cap-desc').value },
+                });
+                $('#cap-title').value = '';
+                $('#cap-desc').value = '';
+                tags.set([]);
+                $('#cap-done').hidden = false;
+                if (open) {
+                    await api('/api/window/capture-done', {});
+                    await api('/api/window/show', { select: idea.id });
+                } else {
+                    setTimeout(close, 450);
+                }
+            } catch (e) {
+                $('#cap-hint').textContent = `Couldn’t save: ${e.message}`;
+            } finally {
+                busy = false;
+            }
+        }
+
+        $('#cap-save').onclick = () => save(false);
+        $('#cap-open').onclick = () => save(true);
+        $('#cap-close').onclick = close;
+        $('#cap-title').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.ctrlKey) { e.preventDefault(); save(e.shiftKey); }
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { e.preventDefault(); close(); }
+            else if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); save(e.shiftKey); }
+        });
+        loadTags();
+    </script>
+</body>
+</html>
