@@ -135,6 +135,9 @@ class DesktopHost:
 
         self.main.events.closing += self._on_main_closing
         self.capture.events.closing += self._on_capture_closing
+        from .webview_watch import watch
+        self.main.events.loaded += lambda: watch(self.main, 'main')
+        self.capture.events.loaded += lambda: watch(self.capture, 'capture')
 
         self._start_tray()
         webview.start(self._on_started, private_mode=False,

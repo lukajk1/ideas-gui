@@ -983,6 +983,15 @@ window.addEventListener('beforeunload', () => { if (ed.dirty) saveNow(); });
     } catch (e) {
         toast(`Couldn’t load: ${e.message}`, { error: true });
     }
-    setInterval(poll, POLL_MS);
-    setInterval(() => { if (ed.id) updateEditorMeta(); }, 60000);
+    // Each check starts after the last one finished, and none run while the window is hidden
+    // (minimized, or closed to the tray for days): it checks again the moment it shows.
+    let pollTimer;
+    const pollLoop = async () => {
+        clearTimeout(pollTimer);
+        if (!document.hidden) await poll();
+        pollTimer = setTimeout(pollLoop, POLL_MS);
+    };
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) pollLoop(); });
+    pollTimer = setTimeout(pollLoop, POLL_MS);
+    setInterval(() => { if (ed.id && !document.hidden) updateEditorMeta(); }, 60000);
 })();
